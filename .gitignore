@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.env
+results/*.jsonl
+results/*.csv
+!results/dry_run_demo.jsonl
+runs/
+
+# Per-instance swebench harness reports -- re-committing these makes CI
+# silently skip re-scoring instead of using the new patch.
+SWE-bench-lite_agent/logs/run_evaluation/
+
+# Downloaded GitHub Actions artifact (zip and/or extracted folder).
+swebench-evaluation-results.zip
+SWE-bench-lite_agent/swebench-evaluation-results/
+SWE-bench-lite_agent/swebench-evaluation-results.zip
+
+# Aggregate local-run reports written to report_dir="." -- unused clutter.
+SWE-bench-lite_agent/*.quixbugs_swebench_lite_agent.json
+
+# generate_artefact_components.py's output dir (normally outside this
+# repo, so this only matters if --out-dir is pointed inside it).
+/artefact-generator/
