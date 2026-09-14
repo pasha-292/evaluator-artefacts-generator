@@ -1,0 +1,21 @@
+# Trimmed for evaluation only -- this repo scores already-produced patches,
+# it doesn't run agents or notebooks. See the main project's
+# requirements.txt if you also need to regenerate patches here.
+
+# The existing NumPy pin matches the main project's, in case pandas/swebench
+# resolve differently without it.
+numpy<2
+pandas
+
+# SWE-bench itself: dataset loading, Docker image building, and the
+# official evaluation harness evaluate.py calls into. 5.0.2 pairs an
+# image-backed TestSpec with a Modal runner that still expects
+# setup_env_script/env_script_list. 3.0.13 keeps those APIs aligned.
+swebench==3.0.13
+docker
+datasets
+
+# Deliberately NOT copied here: openai, anthropic, GitPython, matplotlib,
+# jupyter, ipykernel (agent-running and notebook dependencies) or modal
+# (this repo's workflow always passes --local; see the main project's
+# requirements.txt for why the Modal path is broken upstream anyway).
