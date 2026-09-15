@@ -42,6 +42,7 @@ def evaluate_run(out: str = config.RESULTS_PATH,
                   max_workers: int = 4,
                   timeout: int = 1800,
                   report_dir: str = ".",
+                  logs_dir: str = config.LOGS_DIR,
                   quiet: bool = False,
                   only_groups: list = None):
     """
@@ -110,10 +111,13 @@ def evaluate_run(out: str = config.RESULTS_PATH,
         evaluate.run_official_evaluation(
             predictions_path=group_predictions_path, instance_ids=group_instance_ids, run_id=run_id,
             modal=modal, max_workers=max_workers, timeout=timeout, report_dir=report_dir,
+            logs_dir=logs_dir,
         )
 
         group_results = [r for r in results if evaluate.model_name_or_path(r["condition"], r["trial"]) == group_tag]
-        resolutions.update(evaluate.load_all_resolutions(run_id, group_results, report_dir=report_dir))
+        resolutions.update(evaluate.load_all_resolutions(
+            run_id, group_results, report_dir=report_dir, logs_dir=logs_dir,
+        ))
 
     # Rewrite only the "result" lines with real pass/fail; every "step"
     # line is written back exactly as it already was, untouched -- no
@@ -208,6 +212,10 @@ def main():
     p_eval.add_argument("--predictions", default=config.PREDICTIONS_PATH)
     p_eval.add_argument("--summary-out", default=config.SUMMARY_CSV_PATH)
     p_eval.add_argument("--run-id", default=config.SWEBENCH_RUN_ID)
+    p_eval.add_argument("--logs-dir", default=config.LOGS_DIR,
+                         help="Where swebench's own per-instance evaluation logs/reports are "
+                              "written and read back from (default: config.LOGS_DIR, i.e. "
+                              "<model_key>/logs/run_evaluation -- see config.model_paths).")
     p_eval.add_argument("--local", action="store_true",
                          help="Evaluate on local Docker instead of Modal's cloud "
                               "(config.EVALUATE_USE_MODAL_BY_DEFAULT's default).")
@@ -242,7 +250,8 @@ def main():
         only_groups = [g.strip() for g in args.groups.split(",") if g.strip()] if args.groups else None
         evaluate_run(out=args.out, predictions_path=args.predictions, summary_out=args.summary_out,
                      run_id=args.run_id, modal=not args.local, max_workers=args.max_workers,
-                     timeout=args.timeout, report_dir=args.report_dir, only_groups=only_groups)
+                     timeout=args.timeout, report_dir=args.report_dir, logs_dir=args.logs_dir,
+                     only_groups=only_groups)
     elif args.command == "list-groups":
         groups = (list_evaluation_groups_by_condition(args.predictions) if args.by_condition
                   else list_evaluation_groups(args.predictions))

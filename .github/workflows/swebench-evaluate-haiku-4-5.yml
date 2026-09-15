@@ -1,0 +1,197 @@
+name: SWE-bench evaluate (Claude Haiku 4.5, local Docker, parallel)
+
+# Manual trigger only -- this spends real CI minutes and Docker build time,
+# so it shouldn't run on every push. Runs entirely on GitHub-hosted runners'
+# own disk/Docker daemon (Modal is not used here -- see
+# SWE-bench-lite_agent/evaluate.py's docstring for why the Modal path is
+# currently broken upstream), and uploads results/logs as a downloadable
+# artifact instead of writing anything back to the repo.
+#
+# Claude Haiku 4.5-only, and independent of this repo's other model workflow(s)
+# (see .github/workflows/ for the rest) -- every step below reads/writes
+# only haiku-4-5/ (results and logs together) and this model's own run id
+# ('quixbugs_swebench_lite_agent'), via explicit --out/--predictions/--summary-out/--run-id/
+# --logs-dir flags, never config.py's defaults. Triggering this workflow
+# never requires, or affects, any other model's workflow or results.
+#
+# Parallel, and safe to be here since this repo is public: GitHub Actions
+# bills total minutes across all jobs, not wall-clock time, and a parallel
+# matrix repeats the Docker base/env/instance image build in every job
+# instead of once -- more total minutes for less wall-clock time. That
+# trade only matters on a private repo's limited monthly minutes; a public
+# repo's minutes are unlimited, so there's no downside here.
+#
+# Three jobs:
+#   1. discover -- lists the CONDITIONS in haiku-4-5/results/predictions.json,
+#      each bundled with all of its trials' tags (list-groups --by-condition)
+#      -- one job per condition below, not one per (condition, trial) pair,
+#      so e.g. "full" trials 1-3 evaluate together in a single job instead of
+#      three. Fewer, larger jobs, and each job's Docker base/env/instance
+#      image build is amortized across that condition's trials instead of
+#      repeating per trial.
+#   2. evaluate -- one matrix job per condition, each scoring ONLY that
+#      condition's trials (--groups, a comma list) against its own
+#      checkout, so a job's rewrite of haiku-4-5/results/swebench_ablation.jsonl
+#      only ever touches its own condition's rows (see evaluate_run()'s
+#      only_groups docstring) -- safe to run concurrently precisely because
+#      of that. Frees up runner disk space and caps --max-workers at 1
+#      before evaluating, same as the main project's own workflow -- see
+#      that workflow's "evaluate" job comments for the exit-143
+#      disk-exhaustion incident these two steps fix; this repo's jobs hit
+#      the identical Docker build without them.
+#   3. combine -- downloads every condition job's output and merges them
+#      back into one haiku-4-5/results/swebench_ablation.jsonl (merge-logs;
+#      last-scored-wins per row, see evaluate.merge_evaluated_logs),
+#      recomputes the summary CSV, and uploads the single artifact you
+#      actually download.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SWE-bench-lite_agent
+    outputs:
+      groups: ${{ steps.list.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: List conditions (all trials bundled per condition) to evaluate
+        id: list
+        run: |
+          echo "groups=$(python run_swebench_ablation.py list-groups --by-condition --json \
+            --predictions haiku-4-5/results/predictions.json)" >> "$GITHUB_OUTPUT"
+
+  evaluate:
+    needs: discover
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SWE-bench-lite_agent
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.discover.outputs.groups) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Building 2+ full conda-based scientific-Python testbed environments
+      # (one per repo the condition's instances span) can exceed the
+      # standard runner's ~14GB free disk -- a job died mid-build (exit 143,
+      # SIGTERM) at "Building environment images: 0/2" on a real run before
+      # this step existed. Removing GitHub's preinstalled toolchains this
+      # job never uses reclaims tens of GB up front.
+      - name: Free up runner disk space
+        run: |
+          echo "Before:" && df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /opt/az \
+            "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+          docker image prune --all --force || true
+          echo "After:" && df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Evaluate this condition's trials only, via local Docker
+        # --max-workers 1: serializes environment/instance builds instead of
+        # up to 4 concurrent (the CLI's own default) -- same disk-exhaustion
+        # incident above also showed 4-way concurrency spiking peak disk/
+        # memory use during environment builds specifically, not just total
+        # disk consumed. Slower per job, but each job only covers one
+        # condition's few instances, so the cost is small.
+        run: |
+          python run_swebench_ablation.py evaluate --local --max-workers 1 --groups "${{ matrix.tags }}" \
+            --out haiku-4-5/results/swebench_ablation.jsonl \
+            --predictions haiku-4-5/results/predictions.json \
+            --summary-out haiku-4-5/results/swebench_ablation_summary.csv \
+            --run-id quixbugs_swebench_lite_agent \
+            --logs-dir haiku-4-5/logs/run_evaluation
+
+      - name: Upload this condition's results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Intermediate artifact -- only the combine job below downloads
+          # these, within the same run, so a model-scoped condition name is
+          # unambiguous without also needing the run/sha suffix the final
+          # artifact uses, and never collides with the other model
+          # workflow's own intermediate artifacts if both happen to run at
+          # the same time.
+          name: swebench-eval-group-haiku-4-5-${{ matrix.condition }}
+          path: SWE-bench-lite_agent/haiku-4-5/
+          retention-days: 1
+
+  combine:
+    needs: evaluate
+    if: always()
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SWE-bench-lite_agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download every group's results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: swebench-eval-group-haiku-4-5-*
+          path: SWE-bench-lite_agent/group-artifacts
+
+      - name: Merge per-group trajectory logs into one
+        run: |
+          INPUTS=$(find group-artifacts -name swebench_ablation.jsonl | paste -sd, -)
+          python run_swebench_ablation.py merge-logs --inputs "$INPUTS" \
+            --out haiku-4-5/results/swebench_ablation.jsonl --summary-out haiku-4-5/results/swebench_ablation_summary.csv
+
+      - name: Merge per-group evaluation logs into one
+        # Each downloaded group artifact was uploaded from a single
+        # haiku-4-5/ path (see the evaluate job's own upload step), which
+        # strips that leading directory -- so inside group-artifacts/*/ the
+        # structure is bare results/... and logs/run_evaluation/..., not
+        # haiku-4-5/results/... Re-homed under haiku-4-5/logs/run_evaluation here so the
+        # final upload below (again a single haiku-4-5/ path) produces
+        # the same paste-ready haiku-4-5/ layout as the main project.
+        run: |
+          mkdir -p haiku-4-5/logs/run_evaluation
+          for d in group-artifacts/*/logs/run_evaluation/*/; do
+            [ -d "$d" ] && cp -r "$d" "haiku-4-5/logs/run_evaluation/$(basename "$(dirname "$d")")/"
+          done
+          rm -rf group-artifacts
+
+      - name: Upload combined results and logs
+        uses: actions/upload-artifact@v4
+        with:
+          # Name includes the model key, run number, and short commit SHA so
+          # an old download -- or the other model's -- can never be mistaken
+          # for this one. See the main project's git history around "Get new
+          # results" for what happens when a stale/ambiguous artifact name
+          # gets merged back over a newer, not-yet-evaluated commit's results.
+          #
+          # A single haiku-4-5/ path, not two separate results/logs paths --
+          # deliberately, so the downloaded artifact's own top level IS
+          # results/ and logs/run_evaluation/ together, and copying/pasting
+          # it over the main project's haiku-4-5/ is one directory overwrite.
+          name: swebench-evaluation-results-haiku-4-5-run${{ github.run_number }}-${{ github.sha }}
+          path: SWE-bench-lite_agent/haiku-4-5/
+          retention-days: 14

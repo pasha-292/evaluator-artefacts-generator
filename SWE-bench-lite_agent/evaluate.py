@@ -51,9 +51,15 @@ import inspect
 import subprocess
 import sys
 from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 
 import config
+
+# swebench.harness.run_evaluation's own default -- see
+# _redirected_run_evaluation_log_dir's docstring for why this project needs
+# to know it (to redirect it per model) rather than just using it as-is.
+DEFAULT_LOGS_DIR = Path("logs/run_evaluation")
 
 
 def _run_swebench_main(**kwargs):
@@ -110,9 +116,42 @@ def _running_in_event_loop() -> bool:
         return False
 
 
+@contextmanager
+def _redirected_run_evaluation_log_dir(logs_dir: Path):
+    """
+    swebench.harness.run_evaluation hardcodes RUN_EVALUATION_LOG_DIR =
+    Path("logs/run_evaluation") as a module-level constant, resolved
+    relative to the process's cwd -- main() itself takes no parameter to
+    redirect where it writes per-instance logs/reports. This monkeypatches
+    that one binding (the name main()'s own body actually reads, via
+    swebench.harness.run_evaluation's namespace -- not
+    swebench.harness.constants', a separate copy of the same original value)
+    for the duration of a single main() call, restoring it afterwards even
+    on error, so run_official_evaluation() can honor a model-scoped
+    logs_dir. load_resolution() below reads back from the same logs_dir
+    value directly instead of re-importing swebench's constant, so the
+    write and read sides can't drift apart.
+
+    A no-op (no import, no patch) when logs_dir already equals swebench's
+    own default -- the common case for any caller that doesn't pass
+    logs_dir at all.
+    """
+    logs_dir = Path(logs_dir)
+    if logs_dir == DEFAULT_LOGS_DIR:
+        yield
+        return
+    from swebench.harness import run_evaluation as _run_evaluation_module
+    original = _run_evaluation_module.RUN_EVALUATION_LOG_DIR
+    _run_evaluation_module.RUN_EVALUATION_LOG_DIR = logs_dir
+    try:
+        yield
+    finally:
+        _run_evaluation_module.RUN_EVALUATION_LOG_DIR = original
+
+
 def _run_modal_evaluation_via_subprocess(instance_ids: list, predictions_path: Path,
                                           run_id: str, max_workers: int, timeout: int,
-                                          report_dir: str) -> None:
+                                          report_dir: str, logs_dir: Path = DEFAULT_LOGS_DIR) -> None:
     """
     Runs swebench.harness.run_evaluation.main(..., modal=True) in a fresh
     subprocess instead of in-process. Needed because Modal's own SDK
@@ -131,11 +170,21 @@ def _run_modal_evaluation_via_subprocess(instance_ids: list, predictions_path: P
     Output is streamed line by line as it arrives (not captured and
     printed only at the end), so Modal's own build/progress output still
     shows up live in the notebook the same way it would in a terminal.
+
+    logs_dir is passed through and applied inside the subprocess itself
+    (via the same monkeypatch _redirected_run_evaluation_log_dir uses),
+    since the subprocess's own cwd (config.REPO_ROOT, set below) is what
+    swebench's RUN_EVALUATION_LOG_DIR would otherwise resolve against.
     """
     script = (
         "import sys; sys.path.insert(0, sys.argv[1]);"
-        "from evaluate import _run_swebench_main;"
+        "from pathlib import Path;"
+        "from evaluate import _run_swebench_main, DEFAULT_LOGS_DIR;"
         "import json;"
+        "logs_dir = Path(sys.argv[10]);"
+        "if logs_dir != DEFAULT_LOGS_DIR:\n"
+        "    from swebench.harness import run_evaluation as _rem\n"
+        "    _rem.RUN_EVALUATION_LOG_DIR = logs_dir\n"
         "_run_swebench_main(dataset_name=sys.argv[2], split=sys.argv[3],"
         "     instance_ids=json.loads(sys.argv[4]), predictions_path=sys.argv[5],"
         "     max_workers=int(sys.argv[6]), open_file_limit=8192, run_id=sys.argv[7],"
@@ -146,7 +195,7 @@ def _run_modal_evaluation_via_subprocess(instance_ids: list, predictions_path: P
         sys.executable, "-c", script,
         str(config.REPO_ROOT), config.DATASET_NAME, config.DATASET_SPLIT,
         json.dumps(instance_ids), str(predictions_path), str(max_workers),
-        run_id, str(timeout), report_dir,
+        run_id, str(timeout), report_dir, str(logs_dir),
     ]
     proc = subprocess.Popen(args, cwd=str(config.REPO_ROOT), stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -214,7 +263,8 @@ def model_name_or_path(condition: str, trial: int) -> str:
 
 def run_official_evaluation(predictions_path: Path, instance_ids: list, run_id: str,
                              modal: bool = False, max_workers: int = 4,
-                             timeout: int = 1800, report_dir: str = ".") -> Path:
+                             timeout: int = 1800, report_dir: str = ".",
+                             logs_dir: Path = DEFAULT_LOGS_DIR) -> Path:
     """
     Calls swebench.harness.run_evaluation.main(...) -- the real, official
     entrypoint, unmodified -- against the predictions file. Needs either a
@@ -230,46 +280,57 @@ def run_official_evaluation(predictions_path: Path, instance_ids: list, run_id: 
     machinery at all.
 
     Writes swebench's own per-instance logs and reports under
-    logs/run_evaluation/<run_id>/ (relative to wherever this is run from).
-    Returns the path to the aggregate report.json run_evaluation.main
-    itself writes and returns, when run in-process; returns None when run
-    via the subprocess path (the caller doesn't use this return value --
-    see run_swebench_ablation.py's evaluate_run, which reads the
-    per-instance report.json files directly instead).
+    logs_dir/<run_id>/ -- defaults to logs/run_evaluation/<run_id>/
+    (relative to wherever this is run from), swebench's own hardcoded
+    location, but honors a model-scoped logs_dir instead when one is
+    passed (see _redirected_run_evaluation_log_dir). Returns the path to
+    the aggregate report.json run_evaluation.main itself writes and
+    returns, when run in-process; returns None when run via the
+    subprocess path (the caller doesn't use this return value -- see
+    run_swebench_ablation.py's evaluate_run, which reads the per-instance
+    report.json files directly instead).
     """
     if modal and _running_in_event_loop():
         _run_modal_evaluation_via_subprocess(
             instance_ids=instance_ids, predictions_path=predictions_path, run_id=run_id,
-            max_workers=max_workers, timeout=timeout, report_dir=report_dir,
+            max_workers=max_workers, timeout=timeout, report_dir=report_dir, logs_dir=logs_dir,
         )
         return None
 
-    return _run_swebench_main(
-        dataset_name=config.DATASET_NAME,
-        split=config.DATASET_SPLIT,
-        instance_ids=instance_ids,
-        predictions_path=str(predictions_path),
-        max_workers=max_workers,
-        open_file_limit=8192,
-        run_id=run_id,
-        timeout=timeout,
-        rewrite_reports=False,
-        modal=modal,
-        report_dir=report_dir,
-    )
+    with _redirected_run_evaluation_log_dir(logs_dir):
+        return _run_swebench_main(
+            dataset_name=config.DATASET_NAME,
+            split=config.DATASET_SPLIT,
+            instance_ids=instance_ids,
+            predictions_path=str(predictions_path),
+            max_workers=max_workers,
+            open_file_limit=8192,
+            run_id=run_id,
+            timeout=timeout,
+            rewrite_reports=False,
+            modal=modal,
+            report_dir=report_dir,
+        )
 
 
 def load_resolution(run_id: str, condition: str, trial: int, instance_id: str,
-                    report_dir: str = ".") -> dict:
+                    report_dir: str = ".", logs_dir: Path = DEFAULT_LOGS_DIR) -> dict:
     """
     Reads back the report for this exact (condition, trial, instance) triple.
     The local-Docker path writes per-instance report.json files, while the
     Modal path writes one aggregate report in report_dir, so support both.
+
+    logs_dir must be whatever was passed to the run_official_evaluation()
+    call that produced this report (default: swebench's own
+    logs/run_evaluation) -- taken directly as a parameter here, rather than
+    re-imported from swebench.harness.constants (a separate copy of the same
+    original value, unaffected by run_official_evaluation's own redirect),
+    so the write and read sides can never drift apart onto different paths.
     """
-    from swebench.harness.constants import RUN_EVALUATION_LOG_DIR, LOG_REPORT
+    from swebench.harness.constants import LOG_REPORT
 
     report_path = (
-        Path(RUN_EVALUATION_LOG_DIR) / run_id / model_name_or_path(condition, trial)
+        Path(logs_dir) / run_id / model_name_or_path(condition, trial)
         / instance_id / LOG_REPORT
     )
     if not report_path.exists():
@@ -295,7 +356,8 @@ def load_resolution(run_id: str, condition: str, trial: int, instance_id: str,
     return report.get(instance_id, {"resolved": False, "error": "instance_id not in report"})
 
 
-def load_all_resolutions(run_id: str, results: list, report_dir: str = ".") -> dict:
+def load_all_resolutions(run_id: str, results: list, report_dir: str = ".",
+                          logs_dir: Path = DEFAULT_LOGS_DIR) -> dict:
     """Convenience wrapper: given the same results list write_predictions
     was called with, looks up every (instance_id, condition, trial)'s
     resolution and returns {(instance_id, condition, trial): report_dict}."""
@@ -303,7 +365,8 @@ def load_all_resolutions(run_id: str, results: list, report_dir: str = ".") -> d
     for r in results:
         key = (r["instance_id"], r["condition"], r["trial"])
         out[key] = load_resolution(
-            run_id, r["condition"], r["trial"], r["instance_id"], report_dir=report_dir
+            run_id, r["condition"], r["trial"], r["instance_id"],
+            report_dir=report_dir, logs_dir=logs_dir,
         )
     return out
 

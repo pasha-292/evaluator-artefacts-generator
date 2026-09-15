@@ -1,0 +1,362 @@
+[
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..1201627 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Not a continuous colormap, possibly this is a hue level\n+                # not in the hue_order, in which case it is not plotted.\n+                value = (0, 0, 0, 0)\n+                return value\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..8821a5d 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Currently we only get here in scatterplot with hue_order,\n+                # because scatterplot does not consider hue a grouping variable\n+                # So unused hue levels are in the data, but not the lookup table\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..9032089 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,11 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Not a continuous variable, so we have no norm/cmap to use\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..edab012 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,11 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Not a numeric mapping, so no need to interpolate\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..8821a5d 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Currently we only get here in scatterplot with hue_order,\n+                # because scatterplot does not consider hue a grouping variable\n+                # So unused hue levels are in the data, but not the lookup table\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..8821a5d 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Currently we only get here in scatterplot with hue_order,\n+                # because scatterplot does not consider hue a grouping variable\n+                # So unused hue levels are in the data, but not the lookup table\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..5c34dd8 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,12 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+            if self.norm is None:\n+                # Value is not in the lookup table, and no norm is available\n+                # to interpolate (i.e. this is a categorical mapping and the\n+                # value was excluded, e.g. by hue_order). Return a fully\n+                # transparent color so the point is effectively not drawn.\n+                return (0, 0, 0, 0)\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..d4e0519 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,11 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Key is a value that was excluded by hue_order in a categorical map\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..beb4a88 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Value not in the lookup table is only a simple issue if\n+                # there is no numeric mapping, in which case we just return\n+                # a fully transparent color for this value.\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "diff --git a/seaborn/_oldcore.py b/seaborn/_oldcore.py\nindex c9218c1..34a4396 100644\n--- a/seaborn/_oldcore.py\n+++ b/seaborn/_oldcore.py\n@@ -149,6 +149,13 @@ class HueMapping(SemanticMapping):\n             # Use a value that's in the original data vector\n             value = self.lookup_table[key]\n         except KeyError:\n+\n+            if self.norm is None:\n+                # Not a continuous (norm/cmap) mapping, so key is only missing\n+                # because it is not in the lookup table. Return a transparent\n+                # color so that this data point is not plotted.\n+                return (0, 0, 0, 0)\n+\n             # Use the colormap to interpolate between existing datapoints\n             # (e.g. in the context of making a continuous legend)\n             try:\n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-2848",
+    "model_patch": "",
+    "model_name_or_path": "no_skill__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..7359b02 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -21,6 +21,7 @@ class PolyFit(Stat):\n \n     def _fit_predict(self, data):\n \n+        data = data.dropna(subset=[\"x\", \"y\"])\n         x = data[\"x\"]\n         y = data[\"y\"]\n         if x.nunique() <= self.order:\n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..7359b02 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -21,6 +21,7 @@ class PolyFit(Stat):\n \n     def _fit_predict(self, data):\n \n+        data = data.dropna(subset=[\"x\", \"y\"])\n         x = data[\"x\"]\n         y = data[\"y\"]\n         if x.nunique() <= self.order:\n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..c2044f1 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,7 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return groupby.apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n \n \n @dataclass\n",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3010",
+    "model_patch": "diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py\nindex 7b7ddc8..9ec81a4 100644\n--- a/seaborn/_stats/regression.py\n+++ b/seaborn/_stats/regression.py\n@@ -38,7 +38,10 @@ class PolyFit(Stat):\n \n     def __call__(self, data, groupby, orient, scales):\n \n-        return groupby.apply(data, self._fit_predict)\n+        return (\n+            groupby\n+            .apply(data.dropna(subset=[\"x\", \"y\"]), self._fit_predict)\n+        )\n \n \n @dataclass\n",
+    "model_name_or_path": "no_skill__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..fe20484 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = float(vmin), float(vmax)\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..fe20484 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = float(vmin), float(vmax)\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..3c215a6 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -346,7 +346,7 @@ class ContinuousBase(Scale):\n                 vmin, vmax = data.min(), data.max()\n             else:\n                 vmin, vmax = new.norm\n-            vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, axis.convert_units((vmin, vmax)))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..3c215a6 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -346,7 +346,7 @@ class ContinuousBase(Scale):\n                 vmin, vmax = data.min(), data.max()\n             else:\n                 vmin, vmax = new.norm\n-            vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, axis.convert_units((vmin, vmax)))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..1cdfd92 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -347,6 +347,7 @@ class ContinuousBase(Scale):\n             else:\n                 vmin, vmax = new.norm\n             vmin, vmax = axis.convert_units((vmin, vmax))\n+            vmin, vmax = map(float, (vmin, vmax))\n             a = forward(vmin)\n             b = forward(vmax) - forward(vmin)\n \n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py\nindex 6c9ecbc..001d30a 100644\n--- a/seaborn/_core/scales.py\n+++ b/seaborn/_core/scales.py\n@@ -329,6 +329,10 @@ class ContinuousBase(Scale):\n         if new._label_params is None:\n             new = new.label()\n \n+        # Numpy/pandas do not support arithmetic (e.g. subtraction) on booleans\n+        if data.dtype == bool:\n+            data = data.astype(float)\n+\n         forward, inverse = new._get_transform()\n \n         mpl_scale = new._get_scale(str(data.name), forward, inverse)\n",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3190",
+    "model_patch": "diff --git a/seaborn/_core/properties.py b/seaborn/_core/properties.py\nindex cd10e26..d9a1ec6 100644\n--- a/seaborn/_core/properties.py\n+++ b/seaborn/_core/properties.py\n@@ -3,6 +3,7 @@ import itertools\n import warnings\n \n import numpy as np\n+import pandas as pd\n from pandas import Series\n import matplotlib as mpl\n from matplotlib.colors import to_rgb, to_rgba, to_rgba_array\n@@ -564,6 +565,15 @@ class Color(Property):\n         else:\n             return to_rgba_array(colors)[:, :3]\n \n+    def default_scale(self, data: Series) -> Scale:\n+        # Only truly boolean-typed data (not 0/1 numeric data) uses a Nominal scale\n+        # by default; other numeric data (including binary numeric data) is Continuous\n+        if pd.api.types.is_bool_dtype(data):\n+            var_type = \"categorical\"\n+        else:\n+            var_type = variable_type(data, boolean_type=\"numeric\")\n+        return Continuous() if var_type == \"numeric\" else Nominal()\n+\n     def infer_scale(self, arg: Any, data: Series) -> Scale:\n         # TODO when inferring Continuous without data, verify type\n \n",
+    "model_name_or_path": "no_skill__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..5eaa799 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,8 +1472,8 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n-            self.diag_axes = np.array(diag_axes, np.object_)\n+            self.diag_vars = diag_vars\n+            self.diag_axes = diag_axes\n \n         if \"hue\" not in signature(func).parameters:\n             return self._map_diag_iter_hue(func, **kwargs)\n",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "mwaskom__seaborn-3407",
+    "model_patch": "diff --git a/seaborn/axisgrid.py b/seaborn/axisgrid.py\nindex 7534909..857f431 100644\n--- a/seaborn/axisgrid.py\n+++ b/seaborn/axisgrid.py\n@@ -1472,7 +1472,7 @@ class PairGrid(Grid):\n                 for ax in diag_axes[1:]:\n                     share_axis(diag_axes[0], ax, \"y\")\n \n-            self.diag_vars = np.array(diag_vars, np.object_)\n+            self.diag_vars = diag_vars\n             self.diag_axes = np.array(diag_axes, np.object_)\n \n         if \"hue\" not in signature(func).parameters:\n",
+    "model_name_or_path": "no_skill__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/compat.py b/requests/compat.py\nindex be5a1ed..2d05e5a 100644\n--- a/requests/compat.py\n+++ b/requests/compat.py\n@@ -4,6 +4,15 @@\n pythoncompat\n \"\"\"\n \n+import collections\n+try:\n+    import collections.abc\n+    for _name in ('Mapping', 'MutableMapping', 'Callable', 'Iterable'):\n+        if not hasattr(collections, _name):\n+            setattr(collections, _name, getattr(collections.abc, _name))\n+except ImportError:\n+    pass\n+\n from .packages import chardet\n \n import sys\ndiff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..dfce7cf 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -13,7 +13,7 @@ from collections import Mapping\n from datetime import datetime\n \n from .auth import _basic_auth_str\n-from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str\n+from .compat import cookielib, OrderedDict, urljoin, urlparse\n from .cookies import (\n     cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)\n from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT\n@@ -425,7 +425,7 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n+        method = to_native_string(method)\n \n         # Create the Request.\n         req = Request(\n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/models.py b/requests/models.py\nindex 3f6a4f9..0614264 100644\n--- a/requests/models.py\n+++ b/requests/models.py\n@@ -329,7 +329,7 @@ class PreparedRequest(RequestEncodingMixin, RequestHooksMixin):\n         \"\"\"Prepares the given HTTP method.\"\"\"\n         self.method = method\n         if self.method is not None:\n-            self.method = self.method.upper()\n+            self.method = to_native_string(self.method.upper())\n \n     def prepare_url(self, url, params):\n         \"\"\"Prepares the given HTTP URL.\"\"\"\ndiff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..21fa866 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -425,8 +425,6 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n-        method = builtin_str(method)\n-\n         # Create the Request.\n         req = Request(\n             method = method.upper(),\n",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2317",
+    "model_patch": "diff --git a/requests/sessions.py b/requests/sessions.py\nindex d701ff2..70b90aa 100644\n--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -425,6 +425,12 @@ class Session(SessionRedirectMixin):\n             If Tuple, ('cert', 'key') pair.\n         \"\"\"\n \n+        # Convert bytes method to native str, so it is used properly\n+        # when constructing the request (e.g. on Python 3, where\n+        # str(b'GET') == \"b'GET'\").\n+        if isinstance(method, bytes):\n+            method = method.decode('ascii')\n+\n         method = builtin_str(method)\n \n         # Create the Request.\n",
+    "model_name_or_path": "no_skill__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..c3efa39 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -412,6 +413,9 @@ class HTTPAdapter(BaseAdapter):\n         except (ProtocolError, socket.error) as err:\n             raise ConnectionError(err, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except MaxRetryError as e:\n             if isinstance(e.reason, ConnectTimeoutError):\n                 raise ConnectTimeout(e, request=request)\n",
+    "model_name_or_path": "full__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..cf46860 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -421,6 +422,9 @@ class HTTPAdapter(BaseAdapter):\n \n             raise ConnectionError(e, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except _ProxyError as e:\n             raise ProxyError(e)\n \n",
+    "model_name_or_path": "full__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..56fa4a2 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -424,6 +425,9 @@ class HTTPAdapter(BaseAdapter):\n         except _ProxyError as e:\n             raise ProxyError(e)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except (_SSLError, _HTTPError) as e:\n             if isinstance(e, _SSLError):\n                 raise SSLError(e, request=request)\n",
+    "model_name_or_path": "minus_examples__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..c3efa39 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -412,6 +413,9 @@ class HTTPAdapter(BaseAdapter):\n         except (ProtocolError, socket.error) as err:\n             raise ConnectionError(err, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except MaxRetryError as e:\n             if isinstance(e.reason, ConnectTimeoutError):\n                 raise ConnectTimeout(e, request=request)\n",
+    "model_name_or_path": "minus_examples__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..c3efa39 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -412,6 +413,9 @@ class HTTPAdapter(BaseAdapter):\n         except (ProtocolError, socket.error) as err:\n             raise ConnectionError(err, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except MaxRetryError as e:\n             if isinstance(e.reason, ConnectTimeoutError):\n                 raise ConnectTimeout(e, request=request)\n",
+    "model_name_or_path": "minus_procedure__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..c3efa39 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -412,6 +413,9 @@ class HTTPAdapter(BaseAdapter):\n         except (ProtocolError, socket.error) as err:\n             raise ConnectionError(err, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except MaxRetryError as e:\n             if isinstance(e.reason, ConnectTimeoutError):\n                 raise ConnectTimeout(e, request=request)\n",
+    "model_name_or_path": "minus_procedure__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..6c4e7ab 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -20,6 +20,7 @@ from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n from .packages.urllib3.exceptions import ConnectTimeoutError\n+from .packages.urllib3.exceptions import DecodeError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n from .packages.urllib3.exceptions import ProxyError as _ProxyError\n@@ -29,7 +30,7 @@ from .packages.urllib3.exceptions import SSLError as _SSLError\n from .packages.urllib3.exceptions import ResponseError\n from .cookies import extract_cookies_to_jar\n from .exceptions import (ConnectionError, ConnectTimeout, ReadTimeout, SSLError,\n-                         ProxyError, RetryError)\n+                         ProxyError, RetryError, ContentDecodingError)\n from .auth import _basic_auth_str\n \n DEFAULT_POOLBLOCK = False\n@@ -432,4 +433,7 @@ class HTTPAdapter(BaseAdapter):\n             else:\n                 raise\n \n+        except DecodeError as e:\n+            raise ContentDecodingError(e)\n+\n         return self.build_response(request, resp)\n",
+    "model_name_or_path": "minus_recovery_advice__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..bf72496 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -20,6 +20,7 @@ from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n from .packages.urllib3.exceptions import ConnectTimeoutError\n+from .packages.urllib3.exceptions import DecodeError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n from .packages.urllib3.exceptions import ProxyError as _ProxyError\n@@ -412,6 +413,9 @@ class HTTPAdapter(BaseAdapter):\n         except (ProtocolError, socket.error) as err:\n             raise ConnectionError(err, request=request)\n \n+        except DecodeError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except MaxRetryError as e:\n             if isinstance(e.reason, ConnectTimeoutError):\n                 raise ConnectTimeout(e, request=request)\n",
+    "model_name_or_path": "minus_recovery_advice__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..cf46860 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -421,6 +422,9 @@ class HTTPAdapter(BaseAdapter):\n \n             raise ConnectionError(e, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except _ProxyError as e:\n             raise ProxyError(e)\n \n",
+    "model_name_or_path": "minus_validation__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..cf46860 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -19,6 +19,7 @@ from .compat import urlparse, basestring\n from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,\n                     prepend_scheme_if_needed, get_auth_from_url, urldefragauth)\n from .structures import CaseInsensitiveDict\n+from .packages.urllib3.exceptions import ClosedPoolError\n from .packages.urllib3.exceptions import ConnectTimeoutError\n from .packages.urllib3.exceptions import HTTPError as _HTTPError\n from .packages.urllib3.exceptions import MaxRetryError\n@@ -421,6 +422,9 @@ class HTTPAdapter(BaseAdapter):\n \n             raise ConnectionError(e, request=request)\n \n+        except ClosedPoolError as e:\n+            raise ConnectionError(e, request=request)\n+\n         except _ProxyError as e:\n             raise ProxyError(e)\n \n",
+    "model_name_or_path": "minus_validation__trial2"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..19ef486 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -430,6 +430,6 @@ class HTTPAdapter(BaseAdapter):\n             elif isinstance(e, ReadTimeoutError):\n                 raise ReadTimeout(e, request=request)\n             else:\n-                raise\n+                raise ConnectionError(e, request=request)\n \n         return self.build_response(request, resp)\n",
+    "model_name_or_path": "no_skill__trial1"
+  },
+  {
+    "instance_id": "psf__requests-2674",
+    "model_patch": "diff --git a/requests/adapters.py b/requests/adapters.py\nindex 841cbbf..19ef486 100644\n--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -430,6 +430,6 @@ class HTTPAdapter(BaseAdapter):\n             elif isinstance(e, ReadTimeoutError):\n                 raise ReadTimeout(e, request=request)\n             else:\n-                raise\n+                raise ConnectionError(e, request=request)\n \n         return self.build_response(request, resp)\n",
+    "model_name_or_path": "no_skill__trial2"
+  }
+]
