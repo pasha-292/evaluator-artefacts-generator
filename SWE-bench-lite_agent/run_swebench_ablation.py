@@ -71,7 +71,7 @@ def evaluate_run(out: str = config.RESULTS_PATH,
     touches the groups it was actually asked to evaluate. This is what
     makes it safe to run several evaluate_run() calls concurrently (e.g.
     one GitHub Actions matrix job per group, see
-    .github/workflows/swebench-evaluate.yml) against copies of the same
+    .github/workflows/swebench-evaluate-*.yml) against copies of the same
     out/predictions_path checked out independently on separate runners --
     each job's output only ever disagrees with the others on its own
     group's rows, so merging the copies back together afterwards (see
@@ -192,7 +192,7 @@ def list_evaluation_groups_by_condition(predictions_path: str = config.PREDICTIO
     condition instead of once per (condition, trial) -- fewer total minutes
     AND fewer concurrent jobs needed to run everything in one wave, useful
     when trials x conditions exceeds the CI account's concurrent-job
-    ceiling (see .github/workflows/swebench-evaluate.yml)."""
+    ceiling (see .github/workflows/swebench-evaluate-*.yml)."""
     tags = list_evaluation_groups(predictions_path)
     by_condition = {}
     for tag in tags:
