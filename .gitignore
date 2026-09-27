@@ -8,6 +8,7 @@ results/*.csv
 !results/dry_run_demo.jsonl
 runs/
 .claude
+.vscode
 
 # Per-instance swebench harness reports -- re-committing these makes CI
 # silently skip re-scoring instead of using the new patch. Nested under
