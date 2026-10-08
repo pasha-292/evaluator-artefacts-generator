@@ -34,6 +34,16 @@ def _display_path(p) -> str:
         return str(p)
 
 
+_FINAL_STATUSES = ("passed", "failed", "empty_patch")
+
+
+def _prediction_key(pred: dict):
+    """(instance_id, condition, trial) for a predictions.json entry, parsed
+    from its model_name_or_path tag (see evaluate.model_name_or_path)."""
+    m = re.match(r"^(.*)__trial(\d+)$", pred["model_name_or_path"])
+    return (pred["instance_id"], m.group(1), int(m.group(2))) if m else None
+
+
 def evaluate_run(out: str = config.RESULTS_PATH,
                   predictions_path: str = config.PREDICTIONS_PATH,
                   summary_out: str = config.SUMMARY_CSV_PATH,
@@ -44,7 +54,8 @@ def evaluate_run(out: str = config.RESULTS_PATH,
                   report_dir: str = ".",
                   logs_dir: str = config.LOGS_DIR,
                   quiet: bool = False,
-                  only_groups: list = None):
+                  only_groups: list = None,
+                  skip_evaluated: bool = False):
     """
     Callable version of `run_swebench_ablation.py evaluate`. Scores the
     patches `run()` produced (in predictions_path) through the official
@@ -78,6 +89,13 @@ def evaluate_run(out: str = config.RESULTS_PATH,
     evaluate.merge_evaluated_logs) is a simple last-scored-wins merge,
     not a 3-way conflict. list_evaluation_groups() below lists the group
     tags available to filter on.
+
+    skip_evaluated=True skips every (instance, condition, trial) whose row
+    in out already has a final evaluation_status (see _FINAL_STATUSES);
+    those rows are written back byte-for-byte unchanged and their
+    predictions are never sent to the harness, so an already-scored
+    result can't be overwritten or re-run. Rows with no status, or
+    status "error", are still evaluated.
     """
     def log(msg):
         if not quiet:
@@ -95,6 +113,19 @@ def evaluate_run(out: str = config.RESULTS_PATH,
         if unknown:
             raise ValueError(f"Unknown group(s) {unknown}. Available: {sorted(groups)}")
         groups = {tag: preds for tag, preds in groups.items() if tag in only_groups}
+
+    done_keys = set()
+    if skip_evaluated:
+        done_keys = {(r["instance_id"], r["condition"], r["trial"]) for r in results
+                     if r.get("evaluation_status") in _FINAL_STATUSES}
+        pending_groups = {}
+        for tag, preds in groups.items():
+            kept = [p for p in preds if _prediction_key(p) not in done_keys]
+            if kept:
+                pending_groups[tag] = kept
+        log(f"skip_evaluated: {len(done_keys)} row(s) already scored, left untouched; "
+            f"{len(groups) - len(pending_groups)} group(s) fully done.")
+        groups = pending_groups
 
     log(f"Evaluating {len(results)} run(s) across {len(groups)} condition/trial group(s) "
         f"via the official swebench harness ({'Modal cloud' if modal else 'local Docker'})...")
@@ -131,10 +162,10 @@ def evaluate_run(out: str = config.RESULTS_PATH,
                 f.write(json.dumps(record) + "\n")
                 continue
             group_tag = evaluate.model_name_or_path(record["condition"], record["trial"])
-            if group_tag not in groups:
+            key = (record["instance_id"], record["condition"], record["trial"])
+            if group_tag not in groups or key in done_keys:
                 f.write(json.dumps(record) + "\n")
                 continue
-            key = (record["instance_id"], record["condition"], record["trial"])
             report = resolutions.get(key, {"resolved": False, "error": "not scored"})
             if report.get("error"):
                 record["passed"] = None
@@ -172,15 +203,31 @@ def evaluate_run(out: str = config.RESULTS_PATH,
     return out_path, summary
 
 
-def list_evaluation_groups(predictions_path: str = config.PREDICTIONS_PATH) -> list:
+def _pending_tags(predictions_path: str, out: str) -> set:
+    """Group tags with at least one prediction not yet finally scored in out."""
+    done = set()
+    for line in Path(out).read_text().splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r["record_type"] == "result" and r.get("evaluation_status") in _FINAL_STATUSES:
+                done.add((r["instance_id"], r["condition"], r["trial"]))
+    return {tag for tag, preds in evaluate.load_predictions_by_group(Path(predictions_path)).items()
+            if any(_prediction_key(p) not in done for p in preds)}
+
+
+def list_evaluation_groups(predictions_path: str = config.PREDICTIONS_PATH, pending_in: str = None) -> list:
     """The condition/trial group tags (model_name_or_path values) present in
     predictions_path -- e.g. for a CI matrix to evaluate one group per job
     (each job passing its tag back to evaluate_run(only_groups=[tag])), or
     just to see what evaluate_run() would otherwise loop over in one call."""
-    return sorted(evaluate.load_predictions_by_group(Path(predictions_path)))
+    tags = sorted(evaluate.load_predictions_by_group(Path(predictions_path)))
+    if pending_in:
+        pending = _pending_tags(predictions_path, pending_in)
+        tags = [t for t in tags if t in pending]
+    return tags
 
 
-def list_evaluation_groups_by_condition(predictions_path: str = config.PREDICTIONS_PATH) -> list:
+def list_evaluation_groups_by_condition(predictions_path: str = config.PREDICTIONS_PATH, pending_in: str = None) -> list:
     """Like list_evaluation_groups(), but bundled by condition: one entry
     per condition, each {"condition": ..., "tags": "full__trial1,full__trial2,..."}
     -- every one of that condition's trials joined into a single comma list,
@@ -193,7 +240,7 @@ def list_evaluation_groups_by_condition(predictions_path: str = config.PREDICTIO
     AND fewer concurrent jobs needed to run everything in one wave, useful
     when trials x conditions exceeds the CI account's concurrent-job
     ceiling (see .github/workflows/swebench-evaluate-*.yml)."""
-    tags = list_evaluation_groups(predictions_path)
+    tags = list_evaluation_groups(predictions_path, pending_in)
     by_condition = {}
     for tag in tags:
         m = re.match(r"^(.*)__trial\d+$", tag)
@@ -230,6 +277,10 @@ def main():
                               "which is what makes it safe to split evaluation across "
                               "several parallel calls (e.g. a CI matrix, one job per group).")
 
+    p_eval.add_argument("--skip-evaluated", action="store_true",
+                         help="Skip (and leave untouched) every row in --out that already has a "
+                              "final evaluation_status (passed/failed/empty_patch).")
+
     p_list_groups = sub.add_parser("list-groups", help="List the condition/trial group tags in predictions.json.")
     p_list_groups.add_argument("--predictions", default=config.PREDICTIONS_PATH)
     p_list_groups.add_argument("--json", action="store_true", help="Print as a JSON array instead of one per line.")
@@ -237,6 +288,9 @@ def main():
                                 help="Bundle every condition's trials into one entry each "
                                      "(comma-joined tags), instead of one entry per (condition, trial) -- "
                                      "for a CI matrix with one job per condition instead of per (condition, trial).")
+
+    p_list_groups.add_argument("--only-pending-in", default=None, metavar="RESULTS_JSONL",
+                                help="Only list groups with rows not yet scored in this results file.")
 
     p_merge = sub.add_parser("merge-logs", help="Merge several evaluate --groups-scoped copies of the "
                                                  "trajectory JSONL (e.g. one per CI matrix job) into one.")
@@ -251,10 +305,10 @@ def main():
         evaluate_run(out=args.out, predictions_path=args.predictions, summary_out=args.summary_out,
                      run_id=args.run_id, modal=not args.local, max_workers=args.max_workers,
                      timeout=args.timeout, report_dir=args.report_dir, logs_dir=args.logs_dir,
-                     only_groups=only_groups)
+                     only_groups=only_groups, skip_evaluated=args.skip_evaluated)
     elif args.command == "list-groups":
-        groups = (list_evaluation_groups_by_condition(args.predictions) if args.by_condition
-                  else list_evaluation_groups(args.predictions))
+        groups = (list_evaluation_groups_by_condition(args.predictions, args.only_pending_in) if args.by_condition
+                  else list_evaluation_groups(args.predictions, args.only_pending_in))
         if args.json:
             print(json.dumps(groups))
         else:

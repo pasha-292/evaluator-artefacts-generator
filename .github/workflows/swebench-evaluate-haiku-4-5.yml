@@ -69,10 +69,13 @@ jobs:
         id: list
         run: |
           echo "groups=$(python run_swebench_ablation.py list-groups --by-condition --json \
-            --predictions haiku-4-5/results/predictions.json)" >> "$GITHUB_OUTPUT"
+            --predictions haiku-4-5/results/predictions.json \
+            --only-pending-in haiku-4-5/results/swebench_ablation.jsonl)" >> "$GITHUB_OUTPUT"
 
   evaluate:
     needs: discover
+    # Nothing pending (every row already scored) -> no matrix, no jobs.
+    if: needs.discover.outputs.groups != '[]'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -114,7 +117,7 @@ jobs:
         # disk consumed. Slower per job, but each job only covers one
         # condition's few instances, so the cost is small.
         run: |
-          python run_swebench_ablation.py evaluate --local --max-workers 1 --groups "${{ matrix.tags }}" \
+          python run_swebench_ablation.py evaluate --local --max-workers 1 --groups "${{ matrix.tags }}" --skip-evaluated \
             --out haiku-4-5/results/swebench_ablation.jsonl \
             --predictions haiku-4-5/results/predictions.json \
             --summary-out haiku-4-5/results/swebench_ablation_summary.csv \
@@ -153,6 +156,8 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Download every group's results
+        # No artifacts exist when discover found nothing pending.
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           pattern: swebench-eval-group-haiku-4-5-*
@@ -160,8 +165,11 @@ jobs:
 
       - name: Merge per-group trajectory logs into one
         run: |
-          INPUTS=$(find group-artifacts -name swebench_ablation.jsonl | paste -sd, -)
-          python run_swebench_ablation.py merge-logs --inputs "$INPUTS" \
+          # The checked-out (already-scored) file goes first as the base, so
+          # previously scored rows are always preserved even if no group ran.
+          cp haiku-4-5/results/swebench_ablation.jsonl /tmp/base_ablation.jsonl
+          INPUTS=$(find group-artifacts -name swebench_ablation.jsonl 2>/dev/null | paste -sd, -)
+          python run_swebench_ablation.py merge-logs --inputs "/tmp/base_ablation.jsonl${INPUTS:+,$INPUTS}" \
             --out haiku-4-5/results/swebench_ablation.jsonl --summary-out haiku-4-5/results/swebench_ablation_summary.csv
 
       - name: Merge per-group evaluation logs into one
