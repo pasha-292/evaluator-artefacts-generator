@@ -14,9 +14,11 @@ triple, written once the loop ends). Loading mixes both into one
 DataFrame; the helpers below split them back out as needed.
 """
 
+import itertools
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 # Tool names that count as "the agent modified a file", across every
@@ -478,6 +480,170 @@ def pairwise_normalised_steps(summary: pd.DataFrame) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame(columns=columns)
     return pd.concat(frames, ignore_index=True)[columns]
+
+
+# Display order for every per-condition table and chart: the two anchors
+# first and last, the four leave-one-out variants in between. Conditions a
+# run didn't cover are skipped; conditions not listed here go at the end.
+CONDITION_ORDER = [
+    "full", "minus_examples", "minus_procedure",
+    "minus_recovery_advice", "minus_validation", "no_skill",
+]
+
+
+def order_conditions(frame: pd.DataFrame, column: str = "condition") -> pd.DataFrame:
+    """frame's rows sorted into CONDITION_ORDER by its `column`."""
+    rank = {c: i for i, c in enumerate(CONDITION_ORDER)}
+    key = frame[column].map(lambda c: rank.get(c, len(rank)))
+    return frame.assign(_order=key).sort_values(["_order", column]).drop(columns="_order").reset_index(drop=True)
+
+
+def pass_rate_matrix(df: pd.DataFrame, value: str = "pass_rate") -> pd.DataFrame:
+    """Instance x condition table of per-instance pass rates (trials already
+    averaged), columns in CONDITION_ORDER. The unit every statistical helper
+    below resamples and pairs over. `value` picks any other
+    task_condition_summary column instead, e.g. "mean_steps_used"."""
+    per_task = task_condition_summary(df)
+    matrix = per_task.pivot(index="instance_id", columns="condition", values=value)
+    cols = [c for c in CONDITION_ORDER if c in matrix.columns] + \
+           [c for c in matrix.columns if c not in CONDITION_ORDER]
+    return matrix[cols].astype(float)
+
+
+def run_outcomes(df: pd.DataFrame, step_cap: int = None) -> pd.DataFrame:
+    """
+    One row per condition describing *how* its runs ended, not just whether
+    they passed: how often a patch was produced at all (has_patch), how
+    often the agent stopped on its own (finished_explicitly) versus being
+    cut off at step_cap, how often it got stuck (see stuck_run_rate), and
+    the cost of each resolved instance. Rates are over runs, not instances;
+    pass_rate is the same instance-averaged figure as condition_summary.
+
+    steps_per_success / tokens_per_success divide per-attempt cost by pass
+    rate, treating every failed attempt as pure waste. step_cap defaults to
+    the largest steps_used seen in the log.
+    """
+    results = results_only(df)
+    per_pair = _per_pair_costs(df)
+    if "has_patch" in results.columns:
+        per_pair = per_pair.merge(
+            results[["instance_id", "condition", "trial", "has_patch"]],
+            on=["instance_id", "condition", "trial"], how="left",
+        )
+    else:
+        per_pair["has_patch"] = None
+    cap = step_cap if step_cap is not None else per_pair["steps_used"].max()
+    per_pair["hit_step_cap"] = per_pair["steps_used"] >= cap
+
+    runs = per_pair.groupby("condition", as_index=False).agg(
+        n_runs=("trial", "size"),
+        has_patch_rate=("has_patch", lambda s: s.astype(float).mean()),
+        finished_explicitly_rate=("finished_explicitly", lambda s: s.astype(float).mean()),
+        hit_step_cap_rate=("hit_step_cap", "mean"),
+    )
+    stuck = stuck_run_rate(df)[["condition", "stuck_rate"]]
+    summary = condition_summary(df)[["condition", "pass_rate", "mean_steps_used", "mean_total_tokens"]]
+    out = summary.merge(runs, on="condition").merge(stuck, on="condition", how="left")
+    out["pass_rate"] = out["pass_rate"].astype(float)
+    out["stuck_rate"] = out["stuck_rate"].astype(float).fillna(0.0)
+    out["steps_per_success"] = out["mean_steps_used"] / out["pass_rate"]
+    out["tokens_per_success"] = out["mean_total_tokens"] / out["pass_rate"]
+    cols = ["condition", "n_runs", "pass_rate", "has_patch_rate", "stuck_rate",
+            "finished_explicitly_rate", "hit_step_cap_rate", "mean_steps_used",
+            "steps_per_success", "mean_total_tokens", "tokens_per_success"]
+    return order_conditions(out[cols])
+
+
+def _bootstrap_indices(n_items: int, n_boot: int, seed: int):
+    return np.random.default_rng(seed).integers(0, n_items, size=(n_boot, n_items))
+
+
+def pass_rate_ci(df: pd.DataFrame, n_boot: int = 10_000, level: float = 0.95, seed: int = 0) -> pd.DataFrame:
+    """
+    Per-condition pass rate with a percentile bootstrap confidence interval,
+    resampling *instances* (not individual runs) with replacement. Trials of
+    the same instance are strongly correlated -- an instance is usually
+    either solvable or not -- so treating runs as independent would make the
+    interval far too narrow. Resampling at the instance level is the honest
+    unit given how few instances this benchmark covers.
+    """
+    matrix = pass_rate_matrix(df)
+    values = matrix.to_numpy()
+    idx = _bootstrap_indices(len(matrix), n_boot, seed)
+    alpha = (1 - level) / 2
+    rows = []
+    for j, condition in enumerate(matrix.columns):
+        col = values[:, j]
+        boots = np.nanmean(col[idx], axis=1)
+        rows.append({
+            "condition": condition,
+            "n_instances": int((~np.isnan(col)).sum()),
+            "pass_rate": np.nanmean(col),
+            "ci_low": np.quantile(boots, alpha),
+            "ci_high": np.quantile(boots, 1 - alpha),
+        })
+    return order_conditions(pd.DataFrame(rows))
+
+
+def _sign_flip_p_value(diffs, n_resamples: int = 100_000, seed: int = 0) -> float:
+    """Two-sided paired permutation test on per-instance differences: under
+    the null, each instance's difference is equally likely to have either
+    sign. Exact (every sign pattern enumerated) up to 16 instances, Monte
+    Carlo above that."""
+    diffs = np.asarray(diffs, dtype=float)
+    diffs = diffs[~np.isnan(diffs)]
+    if len(diffs) == 0 or np.allclose(diffs, 0):
+        return 1.0
+    observed = abs(diffs.mean())
+    if len(diffs) <= 16:
+        signs = np.array(list(itertools.product([1, -1], repeat=len(diffs))))
+    else:
+        signs = np.random.default_rng(seed).choice([1, -1], size=(n_resamples, len(diffs)))
+    null = np.abs((signs * diffs).mean(axis=1))
+    return float((null >= observed - 1e-12).mean())
+
+
+def paired_condition_test(df: pd.DataFrame, reference: str = "full", value: str = "pass_rate",
+                          n_boot: int = 10_000, level: float = 0.95, seed: int = 0) -> pd.DataFrame:
+    """
+    Every other condition compared against `reference`, paired by instance:
+    the mean per-instance difference in `value` (condition minus reference;
+    pass rate by default, or e.g. "mean_steps_used" for cost),
+    a bootstrap confidence interval on that difference (instances
+    resampled, as in pass_rate_ci), an exact sign-flip permutation p-value,
+    and on how many instances the condition scored higher / the same /
+    lower than the reference.
+
+    Pairing matters: instance difficulty varies far more than the condition
+    effect does, so comparing two conditions' pooled pass rates without
+    pairing would bury a consistent per-instance effect under that
+    between-instance variance. With a dozen instances, an exact test can
+    never reach small p-values unless nearly every instance moves the same
+    way -- read p alongside the higher/same/lower counts.
+    """
+    matrix = pass_rate_matrix(df, value=value)
+    if reference not in matrix.columns:
+        raise ValueError(f"Reference condition {reference!r} not found. Available: {list(matrix.columns)}")
+    idx = _bootstrap_indices(len(matrix), n_boot, seed)
+    alpha = (1 - level) / 2
+    rows = []
+    for condition in matrix.columns:
+        if condition == reference:
+            continue
+        diffs = (matrix[condition] - matrix[reference]).to_numpy()
+        boots = np.nanmean(diffs[idx], axis=1)
+        rows.append({
+            "condition": condition,
+            "reference": reference,
+            "delta": np.nanmean(diffs),
+            "ci_low": np.quantile(boots, alpha),
+            "ci_high": np.quantile(boots, 1 - alpha),
+            "p_value": _sign_flip_p_value(diffs, seed=seed),
+            "instances_higher": int((diffs > 0).sum()),
+            "instances_same": int((diffs == 0).sum()),
+            "instances_lower": int((diffs < 0).sum()),
+        })
+    return order_conditions(pd.DataFrame(rows))
 
 
 def format_tool_args(tool: str, args: dict) -> str:
