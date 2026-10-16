@@ -788,3 +788,346 @@ def print_trajectory(df: pd.DataFrame, instance_id: str, condition: str, trial: 
         print(f"[{r['step']:>2}] {r['action']:<24} {r['detail']}")
         if r["result"]:
             print(f"     -> {r['result']}")
+
+
+# ---------------------------------------------------------------------------
+# Trajectory behaviour: localisation, checking, dead-end calls, failure types
+# ---------------------------------------------------------------------------
+# Added after the final 6-trial runs. Everything below only *reads* an
+# existing trajectory log (plus the task metadata and skill files already in
+# the repo) -- nothing here writes to results/, runs/ or logs/. This block is
+# identical in SWE-bench-lite_agent/metrics.py and
+# quixbugs_repo_level_tasks/metrics.py: the run key ("instance_id" or "task")
+# is detected from the log, so either project's log can be passed to either
+# copy (the cross-dataset cell in the Sonnet 5 SWE-bench notebook relies on
+# that).
+
+import re as _re
+
+_CHANGE_TOOLS = {"Edit", "MultiEdit", "write_file"}   # modify an existing file
+_CREATE_TOOLS = {"Write"}                             # create or overwrite a whole file
+_EXEC_RE = _re.compile(r"(^|[\s;&|(])(python3?|pytest|py\.test)\b")
+_ANSI_RE = _re.compile(r"\x1b\[[0-9;]*m")
+_PATH = r"""['"]?([^\s'";|&()<>]+\.\w+)['"]?"""
+_BASH_WRITE_RES = [
+    _re.compile(r"(?<![0-9&<>=-])>>?\s*" + _PATH),                          # shell redirect into a file
+    _re.compile(r"\btee\s+(?:-a\s+)?" + _PATH),
+    _re.compile(r"""open\(\s*['"]([^'"]+)['"]\s*,\s*['"][^'"]*[wa+]"""),     # Python heredoc writing a file
+    _re.compile(r"""Path\(\s*['"]([^'"]+)['"]\s*\)\.write_text"""),
+]
+_IN_PLACE_RE = _re.compile(r"\b(sed|perl)\s+(-\S*\s+)*-i")
+
+
+def bash_write_paths(command: str) -> list:
+    """Files a shell command writes to, by a regex over the command text:
+    `sed -i`/`perl -i` (every *.py file it names), redirects, `tee`, and
+    Python heredocs that open a file for writing. Paths under /tmp and
+    /dev are ignored. Heuristic -- it misses writes through a variable
+    path, so it can only under-count."""
+    command = command or ""
+    paths = []
+    if _IN_PLACE_RE.search(command):
+        paths += _re.findall(r"[^\s'\";|&]+\.py\b", command)
+    for pattern in _BASH_WRITE_RES:
+        paths += pattern.findall(command)
+    return [p for p in dict.fromkeys(paths) if not p.startswith(("/tmp", "/dev"))]
+FAILURE_TYPES = [
+    "never edited",
+    "missed the target file(s)",
+    "edited target, no working check after last edit",
+    "edited target, checked, still failed",
+]
+
+
+def run_key(df: pd.DataFrame) -> str:
+    """The column that names a task in this log: "instance_id" (SWE-bench
+    Lite) or "task" (QuixBugs repo-level)."""
+    if "instance_id" in df.columns and df["instance_id"].notna().any():
+        return "instance_id"
+    return "task"
+
+
+def target_files_from_patches(subset_path) -> dict:
+    """SWE-bench Lite: instance_id -> set of files the gold patch changes.
+    The gold patch is never shown to the agent; it is only used here to ask
+    whether the agent edited the file the real fix lives in."""
+    instances = json.loads(Path(subset_path).read_text())
+    return {x["instance_id"]: set(_re.findall(r"^diff --git a/(\S+) b/", x["patch"], _re.M))
+            for x in instances}
+
+
+def target_files_from_tasks(tasks_dir) -> dict:
+    """QuixBugs repo-level: task_id -> set of files task.json's entry_point
+    names as the buggy file(s) (two files for formula_validator)."""
+    out = {}
+    for path in sorted(Path(tasks_dir).glob("*/task.json")):
+        task = json.loads(path.read_text())
+        out[task["task_id"]] = set(_re.findall(r"src/\S+?\.py", task["entry_point"]))
+    return out
+
+
+def classify_dead_end(tool: str, args: dict, result: dict):
+    """Why a tool call could not have done anything useful, or None if it
+    could. Three kinds, all decided from the call's own output:
+      - "command not found": the shell had no such program (e.g. `python`
+        when only `python3` exists, or no `pytest`);
+      - "no tests collected": a test runner ran but found nothing to run;
+      - "missing path": the file or directory the call named did not exist.
+    A failing test or a traceback is *not* a dead end -- it is information."""
+    result = result or {}
+    out = _ANSI_RE.sub("", result.get("output") or "")
+    is_error = bool(result.get("is_error"))
+    if tool == "Bash":
+        if _re.search(r"command not found|python3? not found|pytest not found|No module named pytest", out):
+            return "command not found"
+        if _re.search(r"no tests ran|no tests collected", out):
+            return "no tests collected"
+        if is_error and _re.search(r"no such file or directory", out, _re.I):
+            return "missing path"
+    elif is_error and _re.search(r"does not exist", out):
+        return "missing path"
+    return None
+
+
+def run_behaviour(df: pd.DataFrame, targets: dict, step_cap: int = None) -> pd.DataFrame:
+    """
+    One row per run describing what the agent did, read from its tool calls:
+
+    - localisation: did it edit the target file(s) at all (edited_target,
+      all_targets_edited), and at which step (first_target_edit_step;
+      first_target_edit_capped counts a run that never edits the target at
+      step_cap, so it can be averaged); edits to other existing files
+      (off_target_edits) and whole-file writes elsewhere, usually scratch
+      scripts (scratch_writes);
+    - checking: how many calls executed code (exec_calls: python/pytest),
+      and whether a working one (not a dead end) came after the last edit
+      (checked_after_last_edit);
+    - waste: dead-end calls by kind (see classify_dead_end);
+    - failure_type for failed runs (see FAILURE_TYPES), None for passes.
+
+    `targets` maps each task/instance to its target files
+    (target_files_from_patches / target_files_from_tasks). Edits are matched
+    by path suffix, so absolute and "./"-prefixed paths both count. An edit
+    is an Edit/MultiEdit/Write call *or* a Bash command that writes a file
+    (bash_write_paths: Haiku 4.5 often patches with `sed -i` or a Python
+    heredoc), so first_edit_step here can be earlier than the Edit/Write-only
+    first-edit metric used in the six-trial diagnostics cells.
+    """
+    key = run_key(df)
+    results = results_only(df).set_index([key, "condition", "trial"])
+    steps = steps_only(df)
+    calls = steps[steps["kind"] == "tool_call"].sort_values("step")
+    cap = step_cap if step_cap is not None else int(results["steps_used"].max())
+    groups = dict(tuple(calls.groupby([key, "condition", "trial"])))
+
+    rows = []
+    for (task, condition, trial), r in results.iterrows():
+        g = groups.get((task, condition, trial), calls.iloc[0:0])
+        task_targets = targets.get(task, set())
+        edited_paths = pd.Series([
+            [(a or {}).get("file_path") or ""] if tool in _CHANGE_TOOLS | _CREATE_TOOLS
+            else bash_write_paths((a or {}).get("command")) if tool == "Bash" else []
+            for tool, a in zip(g["tool"], g["args"])
+        ], index=g.index, dtype=object)
+        is_edit = edited_paths.map(bool)
+        on_target = edited_paths.map(lambda ps: any(p.endswith(t) for p in ps for t in task_targets))
+        is_bash = g["tool"] == "Bash"
+        edits = g[is_edit]
+        target_edits = g[is_edit & on_target]
+        hit = {t for ps in edited_paths for p in ps for t in task_targets if p.endswith(t)}
+
+        dead = [classify_dead_end(t, a, res) for t, a, res in zip(g["tool"], g["args"], g["result"])]
+        dead = pd.Series(dead, index=g.index, dtype=object)
+        is_exec = (g["tool"] == "Bash") & g["args"].map(
+            lambda a: bool(_EXEC_RE.search((a or {}).get("command") or "")))
+        working_exec = g[is_exec & dead.isna()]
+        last_edit = edits["step"].max() if len(edits) else None
+        checked = last_edit is not None and bool((working_exec["step"] > last_edit).any())
+
+        passed = bool(r["passed"])
+        if passed:
+            failure = None
+        elif not len(edits):
+            failure = FAILURE_TYPES[0]
+        elif len(hit) < len(task_targets):
+            failure = FAILURE_TYPES[1]
+        elif not checked:
+            failure = FAILURE_TYPES[2]
+        else:
+            failure = FAILURE_TYPES[3]
+
+        first_target = target_edits["step"].min() if len(target_edits) else np.nan
+        rows.append({
+            key: task, "condition": condition, "trial": trial, "passed": passed,
+            "steps_used": r["steps_used"], "hit_step_cap": r["steps_used"] >= cap,
+            "tool_calls": len(g), "edited": bool(len(edits)),
+            "edited_target": bool(len(target_edits)), "all_targets_edited": len(hit) == len(task_targets),
+            "first_edit_step": edits["step"].min() if len(edits) else np.nan,
+            "first_target_edit_step": first_target,
+            "first_target_edit_capped": cap if np.isnan(first_target) else first_target,
+            "target_edits_via_bash": int((is_bash & on_target).sum()),
+            "off_target_edits": int(((g["tool"].isin(_CHANGE_TOOLS) | is_bash) & is_edit & ~on_target).sum()),
+            "scratch_writes": int((g["tool"].isin(_CREATE_TOOLS) & ~on_target).sum()),
+            "exec_calls": int(is_exec.sum()), "checked_after_last_edit": checked,
+            "dead_end_calls": int(dead.notna().sum()),
+            "dead_command_not_found": int((dead == "command not found").sum()),
+            "dead_no_tests_collected": int((dead == "no tests collected").sum()),
+            "dead_missing_path": int((dead == "missing path").sum()),
+            "failure_type": failure,
+        })
+    return pd.DataFrame(rows)
+
+
+def behaviour_summary(behaviour: pd.DataFrame) -> pd.DataFrame:
+    """Per-condition rates and means over run_behaviour's rows (rates over
+    runs, not trial-averaged per task)."""
+    g = behaviour.groupby("condition")
+    out = pd.DataFrame({
+        "pass_rate": g["passed"].mean(),
+        "edited_target": g["edited_target"].mean(),
+        "median_first_target_edit": g["first_target_edit_step"].median(),
+        "runs_with_off_target_edit": g["off_target_edits"].apply(lambda s: (s > 0).mean()),
+        "runs_with_scratch_write": g["scratch_writes"].apply(lambda s: (s > 0).mean()),
+        "exec_calls": g["exec_calls"].mean(),
+        "checked_after_last_edit": g["checked_after_last_edit"].mean(),
+        "dead_end_calls": g["dead_end_calls"].mean(),
+        "dead_end_share_of_calls": g["dead_end_calls"].sum() / g["tool_calls"].sum(),
+    })
+    return order_conditions(out.reset_index())
+
+
+def failure_type_table(behaviour: pd.DataFrame) -> pd.DataFrame:
+    """Failed runs per condition, split into FAILURE_TYPES (counts)."""
+    fails = behaviour[~behaviour["passed"]]
+    table = (fails.groupby(["condition", "failure_type"]).size().unstack(fill_value=0)
+                  .reindex(columns=FAILURE_TYPES, fill_value=0))
+    table.insert(0, "failed runs", table.sum(axis=1))
+    table = table.reindex(behaviour["condition"].unique(), fill_value=0)
+    return order_conditions(table.reset_index())
+
+
+def paired_run_metric_test(behaviour: pd.DataFrame, column: str, reference: str = "full",
+                           n_boot: int = 10_000, level: float = 0.95, seed: int = 0) -> pd.DataFrame:
+    """paired_condition_test for any run_behaviour column: runs averaged per
+    task first, then every condition against `reference`, paired by task
+    (mean difference, task-bootstrap CI, exact sign-flip p,
+    higher/same/lower counts)."""
+    key = run_key(behaviour)
+    matrix = behaviour.groupby([key, "condition"])[column].mean().astype(float).unstack()
+    idx = _bootstrap_indices(len(matrix), n_boot, seed)
+    alpha = (1 - level) / 2
+    rows = []
+    for condition in matrix.columns:
+        if condition == reference:
+            continue
+        diffs = (matrix[condition] - matrix[reference]).to_numpy()
+        boots = np.nanmean(diffs[idx], axis=1)
+        rows.append({
+            "metric": column, "condition": condition, "reference": reference,
+            "delta": np.nanmean(diffs), "ci_low": np.quantile(boots, alpha), "ci_high": np.quantile(boots, 1 - alpha),
+            "p_value": _sign_flip_p_value(diffs, seed=seed),
+            "higher/same/lower": f"{(diffs > 0).sum()}/{(diffs == 0).sum()}/{(diffs < 0).sum()}",
+        })
+    return order_conditions(pd.DataFrame(rows))
+
+
+def _pass_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    """Task x condition pass rate (trials averaged), like pass_rate_matrix
+    but keyed by run_key, so it accepts either project's log."""
+    key = run_key(df)
+    m = results_only(df).groupby([key, "condition"])["passed"].mean().astype(float).unstack()
+    return m[[c for c in CONDITION_ORDER if c in m.columns] + [c for c in m.columns if c not in CONDITION_ORDER]]
+
+
+def headroom_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Per task/instance: no_skill and full pass rate, the five skill
+    conditions pooled, the headroom no_skill leaves (1 - no_skill) and the
+    pooled lift. Sorted hardest first."""
+    m = _pass_matrix(df)
+    skill = [c for c in m.columns if c != "no_skill"]
+    out = pd.DataFrame({"no_skill": m["no_skill"], "full": m["full"], "skill_pooled": m[skill].mean(axis=1)})
+    out["headroom"] = 1 - out["no_skill"]
+    out["lift_pooled"] = out["skill_pooled"] - out["no_skill"]
+    return out.sort_values("no_skill")
+
+
+def headroom_gain(df: pd.DataFrame, condition: str = None, tasks=None,
+                  n_boot: int = 10_000, seed: int = 0) -> dict:
+    """Normalised gain computed only over the tasks where no_skill leaves
+    headroom (summed lift / summed headroom), for `condition` or the five
+    skill conditions pooled, with a bootstrap over those tasks. `tasks`
+    restricts it further (e.g. to the tasks where two models both have
+    headroom). Answers "is a small whole-dataset gain just a ceiling?": if
+    the gain over the tasks that *can* move is still small, the ceiling is
+    not the explanation."""
+    m = _pass_matrix(df)
+    if tasks is not None:
+        m = m.loc[[t for t in tasks if t in m.index]]
+    m = m[m["no_skill"] < 1]
+    if m.empty:
+        return {"tasks_with_headroom": 0, "gain": np.nan, "ci_low": np.nan, "ci_high": np.nan}
+    skill = m[condition] if condition else m[[c for c in m.columns if c != "no_skill"]].mean(axis=1)
+    lift, head = (skill - m["no_skill"]).to_numpy(), (1 - m["no_skill"]).to_numpy()
+    idx = _bootstrap_indices(len(m), n_boot, seed)
+    boots = lift[idx].sum(axis=1) / head[idx].sum(axis=1)
+    return {"tasks_with_headroom": len(m), "gain": lift.sum() / head.sum(),
+            "ci_low": np.quantile(boots, 0.025), "ci_high": np.quantile(boots, 0.975)}
+
+
+_SECTIONS = {"minus_procedure": "procedure", "minus_examples": "examples",
+             "minus_validation": "validation", "minus_recovery_advice": "recovery_advice"}
+
+
+def skill_section_sizes(task_variants_dir) -> pd.DataFrame:
+    """Per task: characters in the full skill and in each section (full
+    minus that section's leave-one-out variant), from the generated variant
+    files. A rough token count is chars / 4."""
+    rows = []
+    for task_dir in sorted(p for p in Path(task_variants_dir).iterdir() if (p / "full.md").exists()):
+        full = len((task_dir / "full.md").read_text())
+        row = {"task": task_dir.name, "full_chars": full}
+        for variant, section in _SECTIONS.items():
+            path = task_dir / f"{variant}.md"
+            row[section] = full - len(path.read_text()) if path.exists() else np.nan
+        rows.append(row)
+    return pd.DataFrame(rows).set_index("task")
+
+
+def _diff_stats(patch: str) -> dict:
+    files = _re.findall(r"^diff --git a/(\S+) b/", patch, _re.M)
+    new_files = set(_re.findall(r"^diff --git a/\S+ b/(\S+)\n(?:new file mode)", patch, _re.M))
+    lines = patch.splitlines()
+    added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+    return {"files": files, "new_files": new_files, "lines_changed": added + removed}
+
+
+def patch_footprint(predictions_path, subset_path, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    SWE-bench Lite only. One row per submitted (non-empty) patch, comparing it
+    with the gold patch: files touched, lines changed (added + removed), the
+    size relative to the gold patch, and files outside the gold patch --
+    split into new files (usually a reproduction script left in the diff)
+    and other existing files the gold fix does not touch. Joined to the
+    run's resolved flag. Read-only over predictions.json and the subset file.
+    """
+    gold = {x["instance_id"]: _diff_stats(x["patch"]) for x in json.loads(Path(subset_path).read_text())}
+    resolved = results_only(df).set_index(["instance_id", "condition", "trial"])["passed"]
+    rows = []
+    for p in json.loads(Path(predictions_path).read_text()):
+        if not p.get("model_patch"):
+            continue
+        condition, trial = p["model_name_or_path"].rsplit("__trial", 1)
+        trial = int(trial)
+        s, g = _diff_stats(p["model_patch"]), gold[p["instance_id"]]
+        extra = set(s["files"]) - set(g["files"])
+        rows.append({
+            "instance_id": p["instance_id"], "condition": condition, "trial": trial,
+            "resolved": bool(resolved.get((p["instance_id"], condition, trial), False)),
+            "files_touched": len(s["files"]), "lines_changed": s["lines_changed"],
+            "size_vs_gold": s["lines_changed"] / max(g["lines_changed"], 1),
+            "touches_gold_file": bool(set(s["files"]) & set(g["files"])),
+            "extra_new_files": len(extra & s["new_files"]),
+            "extra_existing_files": len(extra - s["new_files"]),
+        })
+    return pd.DataFrame(rows)

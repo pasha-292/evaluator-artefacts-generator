@@ -69,4 +69,4 @@ RESULTS_PATH = _active_model_paths["out"]
 SUMMARY_CSV_PATH = _active_model_paths["summary_out"]
 PREDICTIONS_PATH = _active_model_paths["predictions_out"]
 SWEBENCH_RUN_ID = _active_model_paths["run_id"]
-EVALUATE_USE_MODAL_BY_DEFAULT = True
+EVALUATE_USE_MODAL_BY_DEFAULT = False

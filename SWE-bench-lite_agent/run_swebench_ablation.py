@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 import config
@@ -139,6 +140,18 @@ def evaluate_run(out: str = config.RESULTS_PATH,
         group_predictions_path = predictions_dir / f"predictions_{group_tag}.json"
         evaluate.write_predictions_group(group_predictions, group_predictions_path)
 
+        # The evaluation logs are committed, and the swebench harness skips
+        # any instance that already has a report.json (and returns that old
+        # report instead of re-running). Every instance reaching this point
+        # is unscored (skip_evaluated/only_groups already filtered the rest),
+        # so any report on disk for it is stale -- e.g. from an earlier patch
+        # for the same (condition, trial) -- and is removed first.
+        for instance_id in group_instance_ids:
+            stale = Path(logs_dir) / run_id / group_tag / instance_id
+            if stale.is_dir():
+                log(f"  removing stale report for {instance_id} before re-scoring")
+                shutil.rmtree(stale)
+
         evaluate.run_official_evaluation(
             predictions_path=group_predictions_path, instance_ids=group_instance_ids, run_id=run_id,
             modal=modal, max_workers=max_workers, timeout=timeout, report_dir=report_dir,
@@ -263,9 +276,16 @@ def main():
                          help="Where swebench's own per-instance evaluation logs/reports are "
                               "written and read back from (default: config.LOGS_DIR, i.e. "
                               "<model_key>/logs/run_evaluation -- see config.model_paths).")
-    p_eval.add_argument("--local", action="store_true",
-                         help="Evaluate on local Docker instead of Modal's cloud "
-                              "(config.EVALUATE_USE_MODAL_BY_DEFAULT's default).")
+    p_eval_backend = p_eval.add_mutually_exclusive_group()
+    p_eval_backend.add_argument("--local", dest="modal", action="store_false",
+                                help="Evaluate on local Docker (the default, see "
+                                     "config.EVALUATE_USE_MODAL_BY_DEFAULT). Kept so existing "
+                                     "commands and the GitHub Actions workflows stay explicit.")
+    p_eval_backend.add_argument("--modal", dest="modal", action="store_true",
+                                help="Evaluate on Modal's cloud instead. Deprecated: swebench 3.0.13's "
+                                     "Modal runner is broken upstream (see requirements.txt), but "
+                                     "still free to try.")
+    p_eval.set_defaults(modal=config.EVALUATE_USE_MODAL_BY_DEFAULT)
     p_eval.add_argument("--max-workers", type=int, default=4)
     p_eval.add_argument("--timeout", type=int, default=1800)
     p_eval.add_argument("--report-dir", default=".")
@@ -303,7 +323,7 @@ def main():
     if args.command == "evaluate":
         only_groups = [g.strip() for g in args.groups.split(",") if g.strip()] if args.groups else None
         evaluate_run(out=args.out, predictions_path=args.predictions, summary_out=args.summary_out,
-                     run_id=args.run_id, modal=not args.local, max_workers=args.max_workers,
+                     run_id=args.run_id, modal=args.modal, max_workers=args.max_workers,
                      timeout=args.timeout, report_dir=args.report_dir, logs_dir=args.logs_dir,
                      only_groups=only_groups, skip_evaluated=args.skip_evaluated)
     elif args.command == "list-groups":

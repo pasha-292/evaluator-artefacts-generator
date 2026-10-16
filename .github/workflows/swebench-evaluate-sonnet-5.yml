@@ -183,7 +183,10 @@ jobs:
         run: |
           mkdir -p sonnet-5/logs/run_evaluation
           for d in group-artifacts/*/logs/run_evaluation/*/; do
-            [ -d "$d" ] && cp -r "$d" "sonnet-5/logs/run_evaluation/$(basename "$(dirname "$d")")/"
+            # "$d" is .../logs/run_evaluation/<run_id>/ -- merge its contents into
+            # sonnet-5/logs/run_evaluation/<run_id>/ (creating it first, so GNU cp's
+            # "copy into vs. copy as" rule never nests or flattens a level).
+            [ -d "$d" ] && mkdir -p "sonnet-5/logs/run_evaluation/$(basename "$d")" && cp -r "$d". "sonnet-5/logs/run_evaluation/$(basename "$d")/"
           done
           rm -rf group-artifacts
 
